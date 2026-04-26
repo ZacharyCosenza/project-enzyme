@@ -13,7 +13,7 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
-project_enzyme.egg-info
+/project_enzyme.egg-info
 
 # notebooks
 .ipynb_checkpoints/
