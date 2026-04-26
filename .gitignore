@@ -1,0 +1,24 @@
+# environment
+.venv/
+
+# data & outputs
+data/
+logs/
+
+# keys
+keys.md
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# notebooks
+.ipynb_checkpoints/
+
+# editor
+.vscode/
+
+# AI 
+CLAUDE.md
