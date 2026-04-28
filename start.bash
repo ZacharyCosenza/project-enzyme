@@ -22,11 +22,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
     # ── Python dependencies ────────────────────────────────────────────────────
 
-    echo "[deps] Installing project dependencies..."
-    "$PIP" install -q -e "$SCRIPT_DIR"
-
-    # Detect available accelerator and install the matching torch build.
-    # XPU check: look for Intel GPU via sycl-ls (oneAPI) or /dev/dri with i915/xe.
+    # Detect available accelerator and install torch first so that peft/transformers
+    # dependency resolution finds torch already satisfied and skips downloading it.
     if command -v sycl-ls &>/dev/null && sycl-ls 2>/dev/null | grep -qi "intel.*gpu"; then
         ACCEL=xpu
     elif [ -d /dev/dri ] && (lsmod 2>/dev/null | grep -qE "^(i915|xe) "); then
@@ -41,19 +38,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
     if [ "$ACCEL" = "xpu" ]; then
         echo "[deps] Installing torch (XPU build)..."
-        "$PIP" install -q \
+        "$PIP" install \
             torch==2.10.0+xpu \
             torchvision==0.25.0+xpu \
             torchaudio==2.10.0+xpu \
             --index-url https://download.pytorch.org/whl/xpu
     elif [ "$ACCEL" = "cuda" ]; then
         echo "[deps] Installing torch (CUDA build)..."
-        "$PIP" install -q torch torchvision torchaudio
+        "$PIP" install torch torchvision torchaudio
     else
         echo "[deps] Installing torch (CPU build)..."
-        "$PIP" install -q torch torchvision torchaudio \
+        "$PIP" install torch torchvision torchaudio \
             --index-url https://download.pytorch.org/whl/cpu
     fi
+
+    echo "[deps] Installing project dependencies..."
+    "$PIP" install -e "$SCRIPT_DIR"
 
     # ── Data ──────────────────────────────────────────────────────────────────
 
