@@ -1,6 +1,7 @@
 import pandas as pd
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 RAW = Path(__file__).parent.parent / 'data' / '01_raw'
 
@@ -9,6 +10,7 @@ RAW = Path(__file__).parent.parent / 'data' / '01_raw'
 class Dataset:
     train: pd.DataFrame
     test: pd.DataFrame
+    val: Optional[pd.DataFrame] = field(default=None)
 
     @property
     def wildtype(self) -> str:

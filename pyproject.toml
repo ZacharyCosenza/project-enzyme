@@ -14,10 +14,13 @@ dependencies = [
     "transformers>=5.6",
     "tqdm>=4.67",
     "pyyaml>=6.0",
+    "biopython>=1.84",
+    "peft>=0.10",
 ]
 
 [project.scripts]
 run = "run:main"
+preprocess = "preprocess:main"
 
 [project.optional-dependencies]
 # Install torch separately — XPU build requires --index-url https://download.pytorch.org/whl/xpu

@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+from sklearn.model_selection import train_test_split
 
 import src.experiments
 from src import dataset, evaluate
@@ -46,21 +47,46 @@ def compute_metrics(y_true, y_pred, wt_tm):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', choices=list(REGISTRY))
-    parser.add_argument('--name',  help='Human-readable run name')
-    parser.add_argument('--list',  action='store_true', help='List available models')
-    args = parser.parse_args()
+    parser.add_argument('--name', help='Human-readable run name')
+    parser.add_argument('--list', action='store_true', help='List available models')
+    args, extra = parser.parse_known_args()
 
     if args.list:
         for name in sorted(REGISTRY):
             print(name)
         return
 
-    if not args.model or not args.name:
-        parser.error('--model and --name are required')
+    if not args.model:
+        parser.error('--model is required')
 
     exp, params = REGISTRY[args.model]
     params = dict(params)
-    data  = dataset.load()
+
+    # Forward any extra --key [value] args into params so experiments can read them.
+    i = 0
+    while i < len(extra):
+        if extra[i].startswith('--'):
+            key = extra[i][2:]
+            if i + 1 < len(extra) and not extra[i + 1].startswith('--'):
+                params[key] = extra[i + 1]
+                i += 2
+            else:
+                params[key] = True
+                i += 1
+        else:
+            i += 1
+
+    if not args.name:
+        parser.error('--name is required')
+
+    data = dataset.load()
+
+    train_df, val_df = train_test_split(data.train, test_size=0.1, random_state=42)
+    data = dataset.Dataset(
+        train=train_df.reset_index(drop=True),
+        val=val_df.reset_index(drop=True),
+        test=data.test,
+    )
 
     wt_seq  = params.get('wildtype')
     wt_rows = data.test[data.test['protein_sequence'] == wt_seq] if wt_seq else []
@@ -72,7 +98,10 @@ def main():
     print(f'[predict] {args.model}')
     predictions = exp.predict(data, params)
 
-    valid   = ~np.isnan(predictions)
+    if predictions is None:
+        return
+
+    valid = ~np.isnan(predictions)
     metrics = compute_metrics(
         y_true=data.test['tm'].values[valid],
         y_pred=predictions[valid],
@@ -87,6 +116,10 @@ def main():
 
     with open(run_dir / 'metrics.json', 'w') as f:
         json.dump(metrics, f, indent=2)
+
+    if '_history' in params:
+        with open(run_dir / 'loss_curve.json', 'w') as f:
+            json.dump(params['_history'], f, indent=2)
 
     with open(run_dir / 'predictions.csv', 'w', newline='') as f:
         writer = csv.writer(f)
