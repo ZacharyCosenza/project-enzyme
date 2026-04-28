@@ -17,12 +17,35 @@ PIP="$SCRIPT_DIR/.venv/bin/pip"
 echo "[deps] Installing project dependencies..."
 "$PIP" install -q -e "$SCRIPT_DIR"
 
-echo "[deps] Installing torch (XPU build)..."
-"$PIP" install -q \
-    torch==2.10.0+xpu \
-    torchvision==0.25.0+xpu \
-    torchaudio==2.10.0+xpu \
-    --index-url https://download.pytorch.org/whl/xpu
+# Detect available accelerator and install the matching torch build.
+# XPU check: look for Intel GPU via sycl-ls (oneAPI) or /dev/dri with i915/xe.
+if command -v sycl-ls &>/dev/null && sycl-ls 2>/dev/null | grep -qi "intel.*gpu"; then
+    ACCEL=xpu
+elif [ -d /dev/dri ] && (lsmod 2>/dev/null | grep -qE "^(i915|xe) "); then
+    ACCEL=xpu
+elif command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+    ACCEL=cuda
+else
+    ACCEL=cpu
+fi
+
+echo "[deps] Detected accelerator: $ACCEL"
+
+if [ "$ACCEL" = "xpu" ]; then
+    echo "[deps] Installing torch (XPU build)..."
+    "$PIP" install -q \
+        torch==2.10.0+xpu \
+        torchvision==0.25.0+xpu \
+        torchaudio==2.10.0+xpu \
+        --index-url https://download.pytorch.org/whl/xpu
+elif [ "$ACCEL" = "cuda" ]; then
+    echo "[deps] Installing torch (CUDA build)..."
+    "$PIP" install -q torch torchvision torchaudio
+else
+    echo "[deps] Installing torch (CPU build)..."
+    "$PIP" install -q torch torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cpu
+fi
 
 # ── Data ───────────────────────────────────────────────────────────────────────
 
