@@ -8,6 +8,8 @@ logs/
 # keys
 keys.md
 
+requirements.txt
+
 # python
 __pycache__/
 *.pyc
