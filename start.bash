@@ -7,7 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [ ! -d "$SCRIPT_DIR/.venv" ]; then
     echo "[venv] Creating .venv..."
-    python3 -m venv "$SCRIPT_DIR/.venv"
+    PYTHON=$(command -v python3 || command -v python)
+    "$PYTHON" -m venv "$SCRIPT_DIR/.venv"
 fi
 
 PIP="$SCRIPT_DIR/.venv/bin/pip"
@@ -15,7 +16,7 @@ PIP="$SCRIPT_DIR/.venv/bin/pip"
 # ── Python dependencies ────────────────────────────────────────────────────────
 
 echo "[deps] Installing project dependencies..."
-"$PIP" install -q -e "$SCRIPT_DIR"
+"$PIP" install -q -r "$SCRIPT_DIR/requirements.txt"
 
 # Detect available accelerator and install the matching torch build.
 # XPU check: look for Intel GPU via sycl-ls (oneAPI) or /dev/dri with i915/xe.
