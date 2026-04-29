@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 python preprocess.py mutant_pairs
-python preprocess.py esm2_embeddings --model-name facebook/esm2_t33_650M_UR50D --batch-size 4
+python preprocess.py esm2_embeddings_full --batch-size 4
+python preprocess.py esm2_embeddings_pairs --batch-size 4
 """
 import argparse
 import importlib
@@ -11,23 +12,28 @@ import src.preprocessing
 
 
 def _discover():
-    modules = {}
+    commands = {}
     for _, name, _ in pkgutil.iter_modules(src.preprocessing.__path__):
         mod = importlib.import_module(f'src.preprocessing.{name}')
-        modules[name] = mod
-    return modules
+        if hasattr(mod, 'COMMANDS'):
+            for cmd_name, (run_fn, reg_fn) in mod.COMMANDS.items():
+                commands[cmd_name] = (run_fn, reg_fn)
+        else:
+            commands[name] = (mod.run, getattr(mod, 'register_args', None))
+    return commands
 
 
 def main():
-    modules = _discover()
+    commands = _discover()
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest='step', required=True)
-    for name, mod in modules.items():
+    for name, (run_fn, reg_fn) in commands.items():
         sp = sub.add_parser(name)
-        if hasattr(mod, 'register_args'):
-            mod.register_args(sp)
+        if reg_fn:
+            reg_fn(sp)
     args = parser.parse_args()
-    modules[args.step].run(args)
+    run_fn, _ = commands[args.step]
+    run_fn(args)
 
 
 if __name__ == '__main__':
