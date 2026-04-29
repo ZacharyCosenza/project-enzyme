@@ -2,7 +2,7 @@
 Frozen ESM2 backbone + MLP head on pre-computed embeddings.
 
 Requires embeddings to be pre-computed:
-  python preprocess.py esm2_embeddings
+  python preprocess.py esm2_embeddings_full
 """
 import numpy as np
 import torch
@@ -104,7 +104,7 @@ def _cache_paths(params):
 def fit(dataset: Dataset, params: dict) -> None:
     train_path, val_path = _cache_paths(params)
     if not (train_path.exists() and val_path.exists()):
-        raise FileNotFoundError('Cached embeddings not found. Run: python preprocess.py esm2_embeddings')
+        raise FileNotFoundError('Cached embeddings not found. Run: python preprocess.py esm2_embeddings_full')
 
     print('Loading cached embeddings...')
     X_train = torch.tensor(np.load(train_path))

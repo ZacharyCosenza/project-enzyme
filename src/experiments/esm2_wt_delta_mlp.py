@@ -7,7 +7,7 @@ Wildtype for test is the known Novozymes sequence.
 
 Requires:
   python preprocess.py mutant_pairs
-  python preprocess.py esm2_embeddings
+  python preprocess.py esm2_embeddings_pairs
 """
 import numpy as np
 import pandas as pd
@@ -100,7 +100,7 @@ def fit(dataset: Dataset, params: dict) -> None:
     paths = _cache_paths(params)
     missing = [k for k, p in paths.items() if not p.exists() if 'test' not in k]
     if missing:
-        raise FileNotFoundError(f'Missing features: {missing}. Run: python preprocess.py esm2_embeddings')
+        raise FileNotFoundError(f'Missing features: {missing}. Run: python preprocess.py esm2_embeddings_pairs')
 
     print('Loading cached embeddings...')
     X_train = torch.tensor(np.load(paths['train_mutant']) - np.load(paths['train_wildtype']))

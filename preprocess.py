@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 python preprocess.py mutant_pairs
-python preprocess.py esm2_embeddings_full --batch-size 4
-python preprocess.py esm2_embeddings_pairs --batch-size 4
+python preprocess.py esm2_embeddings_full --batch-size 4   # or esm1_embeddings_full
+python preprocess.py esm2_embeddings_pairs --batch-size 4  # or esm1_embeddings_pairs
 """
 import argparse
 import importlib

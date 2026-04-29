@@ -1,13 +1,18 @@
 """
-Pre-compute ESM2 mean-pool embeddings.
+Embedding preprocessing clearinghouse. Add new model families here.
+
+Output slug is derived from the model name, e.g.:
+  facebook/esm1b_t33_650M_UR50S → esm1b_t33_650M_UR50S_{split}.npy
+  facebook/esm2_t33_650M_UR50D  → esm2_t33_650M_UR50D_{split}.npy
 
 Commands:
-  esm2_embeddings_full  — full train/val splits for esm2_mlp
-  esm2_embeddings_pairs — mutant/wildtype pairs for esm2_wt_delta_mlp
+  esm2_embeddings_full  / esm1_embeddings_full  — full train/val splits
+  esm2_embeddings_pairs / esm1_embeddings_pairs — mutant/wildtype pairs
 
 Usage:
   python preprocess.py esm2_embeddings_full --batch-size 4
-  python preprocess.py esm2_embeddings_pairs --batch-size 4
+  python preprocess.py esm1_embeddings_pairs --batch-size 4
+  python preprocess.py esm2_embeddings_full --model-name facebook/esm2_t6_8M_UR50D --batch-size 4
 """
 import numpy as np
 import pandas as pd
@@ -99,12 +104,19 @@ def run_pairs(args):
     print(f'Saved to {FEATURES}')
 
 
-def _register_args(parser):
+def _register_esm2(parser):
     parser.add_argument('--model-name', default='facebook/esm2_t33_650M_UR50D')
     parser.add_argument('--batch-size', type=int, default=4)
 
 
+def _register_esm1(parser):
+    parser.add_argument('--model-name', default='facebook/esm1b_t33_650M_UR50S')
+    parser.add_argument('--batch-size', type=int, default=4)
+
+
 COMMANDS = {
-    'esm2_embeddings_full':  (run_full,  _register_args),
-    'esm2_embeddings_pairs': (run_pairs, _register_args),
+    'esm2_embeddings_full':  (run_full,  _register_esm2),
+    'esm2_embeddings_pairs': (run_pairs, _register_esm2),
+    'esm1_embeddings_full':  (run_full,  _register_esm1),
+    'esm1_embeddings_pairs': (run_pairs, _register_esm1),
 }
