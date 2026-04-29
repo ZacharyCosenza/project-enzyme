@@ -1,6 +1,6 @@
 """
 Cluster training sequences into wildtype-mutant groups via Hamming distance.
-The derived wildtype per cluster is the sequence with the highest Tm.
+The derived wildtype per cluster is the consensus sequence (modal AA at each position).
 
 Output: data/02_processed/train_mutant_pairs.csv
   Columns: seq_id, protein_sequence, pH, data_source, tm, wildtype_sequence
@@ -58,11 +58,12 @@ def run(args):
     multi_clusters = cluster_sizes[cluster_sizes > 1]
     clustered = train[train['cluster_id'].isin(multi_clusters.index)].copy()
 
-    # Derive wildtype per cluster: sequence with highest Tm
-    wt_map = (
-        clustered.loc[clustered.groupby('cluster_id')['tm'].idxmax()]
-        .set_index('cluster_id')['protein_sequence']
-    )
+    # Derive wildtype per cluster: consensus (modal AA at each position)
+    def consensus(seqs):
+        mat = pd.DataFrame([list(s) for s in seqs])
+        return ''.join(mat[col].mode()[0] for col in mat.columns)
+
+    wt_map = clustered.groupby('cluster_id')['protein_sequence'].apply(lambda s: consensus(s.tolist()))
     clustered['wildtype_sequence'] = clustered['cluster_id'].map(wt_map)
 
     out = clustered[['seq_id', 'protein_sequence', 'pH', 'data_source', 'tm', 'wildtype_sequence']].copy()
