@@ -1,7 +1,9 @@
 """
 Cluster training sequences into wildtype-mutant groups via Hamming distance.
+The derived wildtype per cluster is the sequence with the highest Tm.
 
-Output: data/02_processed/train_cluster_ids.csv
+Output: data/02_processed/train_mutant_pairs.csv
+  Columns: seq_id, protein_sequence, pH, data_source, tm, wildtype_sequence
 
 Usage:
   python preprocess.py mutant_pairs
@@ -54,14 +56,21 @@ def run(args):
     train['cluster_id'] = labels
     cluster_sizes = pd.Series(labels).value_counts()
     multi_clusters = cluster_sizes[cluster_sizes > 1]
+    clustered = train[train['cluster_id'].isin(multi_clusters.index)].copy()
 
-    out = train[['seq_id', 'cluster_id']].copy()
-    out['in_multi_cluster'] = out['cluster_id'].isin(multi_clusters.index)
+    # Derive wildtype per cluster: sequence with highest Tm
+    wt_map = (
+        clustered.loc[clustered.groupby('cluster_id')['tm'].idxmax()]
+        .set_index('cluster_id')['protein_sequence']
+    )
+    clustered['wildtype_sequence'] = clustered['cluster_id'].map(wt_map)
+
+    out = clustered[['seq_id', 'protein_sequence', 'pH', 'data_source', 'tm', 'wildtype_sequence']].copy()
 
     PROCESSED.mkdir(parents=True, exist_ok=True)
-    out_path = PROCESSED / 'train_cluster_ids.csv'
+    out_path = PROCESSED / 'train_mutant_pairs.csv'
     out.to_csv(out_path, index=False)
-    print(f'Clusters with >1 sequence: {len(multi_clusters)}, sequences: {multi_clusters.sum()}')
+    print(f'Clusters with >1 sequence: {len(multi_clusters)}, sequences: {len(out)}')
     print(f'Saved to {out_path}')
 
 

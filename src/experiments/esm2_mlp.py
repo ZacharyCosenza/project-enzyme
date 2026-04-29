@@ -21,7 +21,7 @@ WILDTYPE = (
     'QQTKGTWFQITKFTGAAGPYCKALGSNDKSVCDKNKNIAGDWGFDPAKWAYQYDEKNNKFNYVGK'
 )
 
-PROCESSED = Path(__file__).parent.parent.parent / 'data' / '02_processed'
+FEATURES = Path(__file__).parent.parent.parent / 'data' / '03_features'
 
 CONFIGS = {
     'esm2_mlp': {
@@ -39,23 +39,29 @@ CONFIGS = {
 
 SWEEP = {
     'esm2_mlp': {
-        'hidden_dims': {'type': 'categorical', 'values': [[256, 64], [512, 128], [1024, 256], [512, 256, 64], [1024, 512, 128]]},
-        'dropout':     {'type': 'float',       'low': 0.0,  'high': 0.5},
-        'lr':          {'type': 'float',       'low': 1e-4, 'high': 1e-2, 'log': True},
-        'batch_size':  {'type': 'categorical', 'values': [256, 512, 1024]},
+        'hidden_dims':    {'type': 'categorical', 'values': [[1024, 512, 128], [1024, 512, 256, 128], [2048, 1024, 512, 128], [2048, 1024, 256], [2048, 1024, 512, 256, 128]]},
+        'dropout':        {'type': 'float',       'low': 0.1,  'high': 0.5},
+        'lr':             {'type': 'float',       'low': 1e-3, 'high': 1e-1, 'log': True},
+        'weight_decay':   {'type': 'float',       'low': 1e-5, 'high': 1e-2, 'log': True},
+        'batch_size':     {'type': 'categorical', 'values': [256, 512, 1024]},
+        'activation':     {'type': 'categorical', 'values': ['relu', 'gelu', 'leaky_relu']},
     },
 }
 
 
+_ACTIVATIONS = {'relu': nn.ReLU, 'gelu': nn.GELU, 'leaky_relu': nn.LeakyReLU}
+
+
 class _MLP(nn.Module):
-    def __init__(self, in_dim, hidden_dims, dropout):
+    def __init__(self, in_dim, hidden_dims, dropout, activation='relu'):
         super().__init__()
+        act_cls = _ACTIVATIONS[activation]
         dims = [in_dim] + list(hidden_dims) + [1]
         layers = []
         for i in range(len(dims) - 1):
             layers.append(nn.Linear(dims[i], dims[i+1]))
             if i < len(dims) - 2:
-                layers.append(nn.ReLU())
+                layers.append(act_cls())
                 layers.append(nn.Dropout(dropout))
         self.net = nn.Sequential(*layers)
 
@@ -90,7 +96,7 @@ def _embed(sequences, tokenizer, model, dev, batch_size):
 
 def _cache_paths(params):
     slug = params['model_name'].split('/')[-1]
-    return PROCESSED / f'{slug}_train.npy', PROCESSED / f'{slug}_val.npy'
+    return FEATURES / f'{slug}_train.npy', FEATURES / f'{slug}_val.npy'
 
 
 def fit(dataset: Dataset, params: dict) -> None:
@@ -111,8 +117,8 @@ def fit(dataset: Dataset, params: dict) -> None:
     if isinstance(hidden_dims, str):
         hidden_dims = [int(x) for x in hidden_dims.strip('[]').split(',')]
 
-    mlp = _MLP(X_train.shape[1], hidden_dims, float(params['dropout']))
-    opt = torch.optim.AdamW(mlp.parameters(), lr=float(params['lr']))
+    mlp = _MLP(X_train.shape[1], hidden_dims, float(params['dropout']), params.get('activation', 'relu'))
+    opt = torch.optim.AdamW(mlp.parameters(), lr=float(params['lr']), weight_decay=float(params.get('weight_decay', 0.0)))
     loss_fn = nn.MSELoss()
     loader = DataLoader(TensorDataset(X_train, y_train), batch_size=int(params['batch_size']), shuffle=True)
 
