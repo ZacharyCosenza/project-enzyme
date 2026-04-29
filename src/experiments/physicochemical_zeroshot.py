@@ -36,6 +36,15 @@ CONFIGS = {
     },
 }
 
+SWEEP = {
+    'physicochemical_zeroshot': {
+        'w_blosum': {'type': 'float', 'low': 0.0, 'high': 1.0},
+        'w_hydro':  {'type': 'float', 'low': 0.0, 'high': 1.0},
+        'w_charge': {'type': 'float', 'low': 0.0, 'high': 1.0},
+        'w_volume': {'type': 'float', 'low': 0.0, 'high': 1.0},
+    },
+}
+
 
 def fit(dataset: Dataset, params: dict) -> None:
     pass
@@ -68,6 +77,12 @@ def predict(dataset: Dataset, params: dict) -> np.ndarray:
     std = components.std(axis=0)
     std[std == 0] = 1
     normalised = (components - components.mean(axis=0)) / std
-    result[valid] = normalised @ np.array(params['weights'])
+    weights = np.array([
+        params.get('w_blosum', params['weights'][0]),
+        params.get('w_hydro',  params['weights'][1]),
+        params.get('w_charge', params['weights'][2]),
+        params.get('w_volume', params['weights'][3]),
+    ])
+    result[valid] = normalised @ weights
 
     return result

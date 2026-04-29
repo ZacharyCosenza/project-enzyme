@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml>=6.0",
     "biopython>=1.84",
     "peft>=0.10",
+    "optuna",
 ]
 
 [project.scripts]
