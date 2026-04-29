@@ -7,15 +7,15 @@ name = "project-enzyme"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "numpy>=2.4",
-    "pandas>=2.3",
-    "scipy>=1.17",
-    "scikit-learn>=1.8",
-    "transformers>=5.6",
-    "tqdm>=4.67",
-    "pyyaml>=6.0",
-    "biopython>=1.84",
-    "peft>=0.10",
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "transformers",
+    "tqdm",
+    "pyyaml",
+    "biopython",
+    "peft",
     "optuna",
 ]
 
