@@ -108,7 +108,7 @@ def run_pairs(args):
         _embed_to_h5(df['protein_sequence'].tolist(), df['seq_id'].tolist(),
                      tokenizer, model, dev, args.batch_size,
                      FEATURES / f'{slug}_{split}_mutant.h5')
-        wt_seqs = df['wildtype_sequence'].tolist()
+        wt_seqs = df['wildtype_sequence'].drop_duplicates().tolist()
         _embed_to_h5(wt_seqs, [_wt_hash(s) for s in wt_seqs],
                      tokenizer, model, dev, args.batch_size,
                      FEATURES / f'{slug}_{split}_wildtype.h5')
