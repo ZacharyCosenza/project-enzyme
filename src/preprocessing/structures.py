@@ -93,21 +93,40 @@ def run(args):
     # Test wildtype
     tasks.append((WILDTYPE, STRUCTURES / 'test_wildtype.pdb'))
 
-    already_done = sum(1 for _, p in tasks if p.exists())
-    todo = [(seq, p) for seq, p in tasks if not p.exists()]
-    print(f'Structures: {len(tasks)} total, {already_done} cached, {len(todo)} to fetch')
+    n_train_mut  = len(pairs)
+    n_train_wt   = len(pairs['wildtype_sequence'].unique())
+    n_test_mut   = len(data.test)
+    n_total      = len(tasks)
 
-    too_long = sum(1 for seq, _ in todo if len(seq) > API_MAX_LEN)
-    if too_long:
-        print(f'  ({too_long} sequences exceed {API_MAX_LEN} AA and will be skipped)')
+    cached   = [(seq, p) for seq, p in tasks if p.exists()]
+    todo     = [(seq, p) for seq, p in tasks if not p.exists()]
+    too_long = [(seq, p) for seq, p in todo if len(seq) > API_MAX_LEN]
+    fetchable = [(seq, p) for seq, p in todo if len(seq) <= API_MAX_LEN]
+
+    print(f'{"─" * 44}')
+    print(f'  train mutants  : {n_train_mut:>5}')
+    print(f'  train wildtypes: {n_train_wt:>5}  (deduplicated)')
+    print(f'  test mutants   : {n_test_mut:>5}')
+    print(f'  test wildtype  : {1:>5}')
+    print(f'{"─" * 44}')
+    print(f'  total          : {n_total:>5}')
+    print(f'  cached         : {len(cached):>5}')
+    print(f'  too long (skip): {len(too_long):>5}  (>{API_MAX_LEN} AA)')
+    print(f'  to fetch       : {len(fetchable):>5}')
+    print(f'{"─" * 44}')
+
+    if not fetchable:
+        print('Nothing to fetch.')
+        return
 
     fetched = failed = skipped = 0
     for i, (seq, out_path) in enumerate(todo):
-        print(f'  [{i + 1}/{len(todo)}] {out_path.name}')
         if len(seq) > API_MAX_LEN:
-            print(f'    skipping — length {len(seq)} exceeds API limit ({API_MAX_LEN})')
+            print(f'  [{i + 1}/{len(todo)}] skipping {out_path.name} (len={len(seq)})')
             skipped += 1
             continue
+        remaining = len(fetchable) - fetched - failed
+        print(f'  [{fetched + failed + 1}/{len(fetchable)}] {out_path.name}  ({remaining - 1} remaining after this)')
         ok = _fetch(seq, out_path, timeout=180, retries=args.retries, delay=args.delay)
         if ok:
             fetched += 1
@@ -115,7 +134,8 @@ def run(args):
         else:
             failed += 1
 
-    print(f'\nDone. fetched={fetched}, skipped={skipped}, failed={failed}, cached={already_done}')
+    print(f'{"─" * 44}')
+    print(f'  fetched: {fetched}  skipped: {skipped}  failed: {failed}  cached: {len(cached)}')
 
 
 def register_args(parser):

@@ -13,6 +13,7 @@ dependencies = [
     "scikit-learn",
     "transformers",
     "tqdm",
+    "h5py",
     "pyyaml",
     "biopython",
     "networkx",

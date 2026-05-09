@@ -9,6 +9,8 @@ Requires:
   python preprocess.py mutant_pairs
   python preprocess.py esm2_embeddings_pairs
 """
+import hashlib
+import h5py
 import numpy as np
 import pandas as pd
 import torch
@@ -58,6 +60,10 @@ SWEEP = {
 _ACTIVATIONS = {'relu': nn.ReLU, 'gelu': nn.GELU, 'leaky_relu': nn.LeakyReLU}
 
 
+def _wt_hash(seq):
+    return hashlib.md5(seq.encode()).hexdigest()[:10]
+
+
 class _MLP(nn.Module):
     def __init__(self, in_dim, hidden_dims, dropout, activation='gelu'):
         super().__init__()
@@ -78,38 +84,48 @@ class _MLP(nn.Module):
 def _cache_paths(params):
     slug = params['model_name'].split('/')[-1]
     return {
-        'train_mutant':    FEATURES / f'{slug}_train_mutant.npy',
-        'train_wildtype':  FEATURES / f'{slug}_train_wildtype.npy',
-        'val_mutant':      FEATURES / f'{slug}_val_mutant.npy',
-        'val_wildtype':    FEATURES / f'{slug}_val_wildtype.npy',
-        'test_mutant':     FEATURES / f'{slug}_test_mutant.npy',
-        'test_wildtype':   FEATURES / f'{slug}_test_wildtype.npy',
+        'train_mutant': FEATURES / f'{slug}_train_mutant.h5',
+        'train_wildtype': FEATURES / f'{slug}_train_wildtype.h5',
+        'val_mutant': FEATURES / f'{slug}_val_mutant.h5',
+        'val_wildtype': FEATURES / f'{slug}_val_wildtype.h5',
+        'test_mutant': FEATURES / f'{slug}_test_mutant.h5',
+        'test_wildtype': FEATURES / f'{slug}_test_wildtype.h5',
     }
 
 
-def _load_pairs_labels():
+def _load_pairs():
     pairs_path = PROCESSED / 'train_mutant_pairs.csv'
     if not pairs_path.exists():
         raise FileNotFoundError('train_mutant_pairs.csv not found. Run: python preprocess.py mutant_pairs')
     pairs = pd.read_csv(pairs_path)
-    train_pairs, val_pairs = train_test_split(pairs, test_size=0.1, random_state=42)
-    return train_pairs['tm'].values, val_pairs['tm'].values
+    return train_test_split(pairs, test_size=0.1, random_state=42)
+
+
+def _load_delta(h5_mut_path, h5_wt_path, pairs_df):
+    with h5py.File(h5_mut_path, 'r') as fm, h5py.File(h5_wt_path, 'r') as fw:
+        deltas = []
+        for _, row in pairs_df.iterrows():
+            mut = fm[str(row['seq_id'])][:].mean(axis=0)
+            wt = fw[_wt_hash(row['wildtype_sequence'])][:].mean(axis=0)
+            deltas.append(mut - wt)
+    return np.stack(deltas).astype(np.float32)
 
 
 def fit(dataset: Dataset, params: dict) -> None:
     paths = _cache_paths(params)
-    missing = [k for k, p in paths.items() if not p.exists() if 'test' not in k]
+    missing = [k for k, p in paths.items() if not p.exists() and 'test' not in k]
     if missing:
         raise FileNotFoundError(f'Missing features: {missing}. Run: python preprocess.py esm2_embeddings_pairs')
 
-    print('Loading cached embeddings...')
-    X_train = torch.tensor(np.load(paths['train_mutant']) - np.load(paths['train_wildtype']))
-    X_val = torch.tensor(np.load(paths['val_mutant']) - np.load(paths['val_wildtype']))
+    train_pairs, val_pairs = _load_pairs()
 
-    tm_train, tm_val = _load_pairs_labels()
+    print('Loading cached embeddings...')
+    X_train = torch.tensor(_load_delta(paths['train_mutant'], paths['train_wildtype'], train_pairs))
+    X_val = torch.tensor(_load_delta(paths['val_mutant'], paths['val_wildtype'], val_pairs))
+
     scaler = StandardScaler()
-    y_train = torch.tensor(scaler.fit_transform(tm_train.reshape(-1, 1)).flatten().astype(np.float32))
-    y_val = torch.tensor(scaler.transform(tm_val.reshape(-1, 1)).flatten().astype(np.float32))
+    y_train = torch.tensor(scaler.fit_transform(train_pairs['tm'].values.reshape(-1, 1)).flatten().astype(np.float32))
+    y_val = torch.tensor(scaler.transform(val_pairs['tm'].values.reshape(-1, 1)).flatten().astype(np.float32))
     params['_scaler'] = scaler
 
     hidden_dims = params['hidden_dims']
@@ -163,7 +179,13 @@ def fit(dataset: Dataset, params: dict) -> None:
 
 def predict(dataset: Dataset, params: dict) -> np.ndarray:
     paths = _cache_paths(params)
-    X_test = torch.tensor(np.load(paths['test_mutant']) - np.load(paths['test_wildtype']))
+    with h5py.File(paths['test_mutant'], 'r') as fm, h5py.File(paths['test_wildtype'], 'r') as fw:
+        wt = fw['wildtype'][:].mean(axis=0)
+        deltas = np.stack([
+            fm[str(sid)][:].mean(axis=0) - wt
+            for sid in dataset.test['seq_id']
+        ], dtype=np.float32)
+    X_test = torch.tensor(deltas)
     with torch.no_grad():
         norm_preds = params['_mlp'](X_test).numpy()
     return params['_scaler'].inverse_transform(norm_preds.reshape(-1, 1)).flatten()

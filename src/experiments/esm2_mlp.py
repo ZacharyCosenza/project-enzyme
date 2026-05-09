@@ -4,14 +4,13 @@ Frozen ESM2 backbone + MLP head on pre-computed embeddings.
 Requires embeddings to be pre-computed:
   python preprocess.py esm2_embeddings_full
 """
+import h5py
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-from transformers import AutoTokenizer, AutoModel
 from sklearn.preprocessing import StandardScaler
 from pathlib import Path
-from tqdm import tqdm
 
 from src.dataset import Dataset
 
@@ -35,7 +34,6 @@ CONFIGS = {
         'epochs': 50,
         'patience': 5,
         'batch_size': 512,
-        'embed_batch_size': 4,
     },
 }
 
@@ -71,44 +69,29 @@ class _MLP(nn.Module):
         return self.net(x).squeeze(-1)
 
 
-def _device():
-    if torch.xpu.is_available():
-        return torch.device('xpu')
-    if torch.cuda.is_available():
-        return torch.device('cuda')
-    return torch.device('cpu')
-
-
-def _pool(hidden, attention_mask):
-    mask = attention_mask.unsqueeze(-1).float()
-    return (hidden * mask).sum(1) / mask.sum(1)
-
-
-def _embed(sequences, tokenizer, model, dev, batch_size):
-    embeddings = []
-    for i in tqdm(range(0, len(sequences), batch_size), desc='Embedding'):
-        batch = sequences[i:i+batch_size]
-        inputs = tokenizer(batch, return_tensors='pt', padding=True,
-                           truncation=True, max_length=1024).to(dev)
-        with torch.no_grad():
-            pooled = _pool(model(**inputs).last_hidden_state, inputs['attention_mask'])
-        embeddings.append(pooled.cpu().float().numpy())
-    return np.vstack(embeddings)
-
-
 def _cache_paths(params):
     slug = params['model_name'].split('/')[-1]
-    return FEATURES / f'{slug}_train.npy', FEATURES / f'{slug}_val.npy'
+    return {
+        'train': FEATURES / f'{slug}_train.h5',
+        'val': FEATURES / f'{slug}_val.h5',
+        'test': FEATURES / f'{slug}_test.h5',
+    }
+
+
+def _load_mean_pooled(h5_path, seq_ids):
+    with h5py.File(h5_path, 'r') as f:
+        return np.stack([f[str(sid)][:].mean(axis=0) for sid in seq_ids])
 
 
 def fit(dataset: Dataset, params: dict) -> None:
-    train_path, val_path = _cache_paths(params)
-    if not (train_path.exists() and val_path.exists()):
-        raise FileNotFoundError('Cached embeddings not found. Run: python preprocess.py esm2_embeddings_full')
+    paths = _cache_paths(params)
+    missing = [k for k, p in paths.items() if not p.exists()]
+    if missing:
+        raise FileNotFoundError(f'Missing embeddings: {missing}. Run: python preprocess.py esm2_embeddings_full')
 
     print('Loading cached embeddings...')
-    X_train = torch.tensor(np.load(train_path))
-    X_val = torch.tensor(np.load(val_path))
+    X_train = torch.tensor(_load_mean_pooled(paths['train'], dataset.train['seq_id'].tolist()))
+    X_val = torch.tensor(_load_mean_pooled(paths['val'], dataset.val['seq_id'].tolist()))
 
     scaler = StandardScaler()
     y_train = torch.tensor(scaler.fit_transform(dataset.train['tm'].values.reshape(-1, 1)).flatten().astype(np.float32))
@@ -165,11 +148,8 @@ def fit(dataset: Dataset, params: dict) -> None:
 
 
 def predict(dataset: Dataset, params: dict) -> np.ndarray:
-    mlp = params['_mlp']
-    scaler = params['_scaler']
-    tokenizer = AutoTokenizer.from_pretrained(params['model_name'])
-    model = AutoModel.from_pretrained(params['model_name']).to(_device()).eval()
-    embeddings = _embed(dataset.test['protein_sequence'].tolist(), tokenizer, model, _device(), int(params['embed_batch_size']))
+    paths = _cache_paths(params)
+    X_test = torch.tensor(_load_mean_pooled(paths['test'], dataset.test['seq_id'].tolist()))
     with torch.no_grad():
-        norm_preds = mlp(torch.tensor(embeddings)).numpy()
-    return scaler.inverse_transform(norm_preds.reshape(-1, 1)).flatten()
+        norm_preds = params['_mlp'](X_test).numpy()
+    return params['_scaler'].inverse_transform(norm_preds.reshape(-1, 1)).flatten()
