@@ -29,6 +29,9 @@ preprocess = "preprocess:main"
 # Install torch separately — XPU build requires --index-url https://download.pytorch.org/whl/xpu
 # pip install torch==2.10.0+xpu torchvision==0.25.0+xpu torchaudio==2.10.0+xpu \
 #     --index-url https://download.pytorch.org/whl/xpu
+#
+# Install torch_geometric after torch:
+# pip install torch_geometric
 
 [tool.setuptools.packages.find]
 where = ["."]
